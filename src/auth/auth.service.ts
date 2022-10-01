@@ -4,12 +4,15 @@ import { AuthDto } from './dto';
 import * as bcrypt from 'bcrypt';
 import { Tokens } from './types';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly config: ConfigService,
   ) {}
 
   async signupLocal(body: AuthDto): Promise<Tokens> {
@@ -25,12 +28,23 @@ export class AuthService {
 
     const hash = this.hashData(body.password);
 
-    const user = await this.prisma.user.create({
-      data: {
-        email: body.email,
-        hash,
-      },
-    });
+    let user;
+
+    try {
+      user = await this.prisma.user.create({
+        data: {
+          email: body.email,
+          hash,
+        },
+      });
+    } catch (error: any) {
+      if (error instanceof PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          throw new ForbiddenException('Credentials incorrect');
+        }
+        throw error;
+      }
+    }
 
     const tokens = await this.getTokens(user.id, user.email);
 
@@ -77,7 +91,7 @@ export class AuthService {
     });
   }
 
-  async refreshTokens(userId: number, refreshToken: string) {
+  async refreshTokens(userId: number, refreshToken: string): Promise<Tokens> {
     const user = await this.prisma.user.findUnique({
       where: {
         id: userId,
@@ -109,11 +123,14 @@ export class AuthService {
     const [at, rt] = await Promise.all([
       this.jwtService.signAsync(
         { sub: userId, email },
-        { secret: 'at-secret', expiresIn: 60 * 15 },
+        { secret: this.config.get<string>('AT_SECRET'), expiresIn: '15m' },
       ),
       this.jwtService.signAsync(
         { sub: userId, email },
-        { secret: 'rt-secret', expiresIn: 60 * 60 * 24 * 7 },
+        {
+          secret: this.config.get<string>('RT_SECRET'),
+          expiresIn: '7d',
+        },
       ),
     ]);
 

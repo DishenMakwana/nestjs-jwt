@@ -23,4 +23,11 @@ export class PrismaService
   async onModuleDestroy() {
     await this.$disconnect();
   }
+
+  async cleanDatabase() {
+    if (process.env.NODE_ENV === 'production') return;
+
+    // teardown logic
+    return Promise.all([this.user.deleteMany()]);
+  }
 }

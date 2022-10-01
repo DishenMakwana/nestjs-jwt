@@ -40,7 +40,7 @@ export class AuthController {
   @UseGuards(RtGuard)
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  async refreshTokens(@GetCurrentUser() authUser: any) {
+  async refreshTokens(@GetCurrentUser() authUser: any): Promise<Tokens> {
     return this.authService.refreshTokens(authUser.sub, authUser.refreshTokens);
   }
 }
